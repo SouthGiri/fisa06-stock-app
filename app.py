@@ -94,7 +94,7 @@ if confirm_btn:
                                      close=price_df['Close'])])
                 st.plotly_chart(fig, use_container_width=True)
 
-                # 인터랙티브 HTML 다운로드 (애니메이션/툴팁 포함)
+                # 인터랙티브 HTML 다운로드
                 html_bytes = fig.to_html(full_html=False, include_plotlyjs='cdn').encode('utf-8')
                 st.download_button(
                     label="📥 차트 다운로드",
