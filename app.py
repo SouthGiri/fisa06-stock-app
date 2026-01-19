@@ -12,6 +12,7 @@ import FinanceDataReader as fdr
 import matplotlib.pyplot as plt
 import koreanize_matplotlib
 import plotly.graph_objects as go
+import pmdarima as pm
 
 import os
 from dotenv import load_dotenv
@@ -103,5 +104,69 @@ if confirm_btn:
                     mime="text/html"
                 )
 
+                try:
+                    end_date = datetime.datetime.now()
+                    start_date = end_date - pd.Timedelta(days=800)
+
+                    price_df = fdr.DataReader(stock_code, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"))
+                    # st.wirte(price_df)
+                    close_ser = price_df['Close'].copy()
+                    close_ser.index = pd.to_datetime(close_ser.index)
+
+                    train_end = close_ser.index.max()
+                    train_start = train_end - pd.Timedelta(days=700)
+                    train = close_ser.loc[train_start:train_end]
+
+                    
+
+                    # 5. Auto ARIMA 모델 학습
+                    with st.spinner("모델 학습 중..."):
+                        model = pm.auto_arima(
+                            train,
+                            seasonal=False,
+                            stepwise=True,
+                            suppress_warnings=True,
+                            error_action="ignore"
+                        )
+
+                    # 6. 14일 예측
+                    horizon = 14
+                    forecast = model.predict(n_periods=horizon)
+
+                    # 7. 예측 결과 데이터프레임
+                    future_idx = pd.bdate_range(train_end + pd.Timedelta(days=1), periods=horizon)
+                    fc_df = pd.DataFrame({"예측종가": forecast.values.astype(int)}, index=future_idx)
+
+                    st.subheader("Auto ARIMA 14일 예측")
+                    st.info(f"학습 구간: {train.index.min().date()} ~ {train.index.max().date()} ({len(train)}개)")
+
+                    # 8. 시각화 (최근 1달 + 예측 14일)
+                    recent_1month = train.tail(22)
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=recent_1month.index, 
+                        y=recent_1month, 
+                        mode="lines", 
+                        name="종가(최근 1달)",
+                        line=dict(color='blue')
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=fc_df.index, 
+                        y=fc_df["예측종가"], 
+                        mode="lines", 
+                        name="예측 종가",
+                        line=dict(color='red', dash='dot')
+                    ))
+                    fig.update_layout(
+                        title=f"{company_name} 종가 예측"
+                        # yaxis_title="종가(원)"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"예측 실패: {e}")
+
+        
         except Exception as e:
             st.error(f"오류가 발생했습니다: {e}")
